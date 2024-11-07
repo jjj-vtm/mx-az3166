@@ -25,42 +25,37 @@ use ssd1306::{
 };
 use stm32f4xx_hal::{
     gpio::GpioExt,
-    i2c::{I2c, Mode},
+    i2c::{I2c, Instance, Mode},
     pac::{self},
     rcc::RccExt,
     time::Hertz,
     timer::TimerExt,
 };
 
-struct I2CProxy<'a> {
-    i2c: &'a Mutex<RefCell<I2c<pac::I2C1>>>,
-}
-#[derive(Debug)]
-pub struct ErrorT {}
-
-impl embedded_hal::i2c::Error for ErrorT {
-    fn kind(&self) -> embedded_hal::i2c::ErrorKind {
-        embedded_hal::i2c::ErrorKind::Other
-    }
+struct I2CProxy<'a, I2C: Instance> {
+    i2c: &'a Mutex<RefCell<I2c<I2C>>>,
 }
 
-impl embedded_hal::i2c::ErrorType for I2CProxy<'_> {
-    type Error = ErrorT;
+impl<I2C> embedded_hal::i2c::ErrorType for I2CProxy<'_, I2C>
+where
+    I2C: Instance,
+{
+    type Error = stm32f4xx_hal::i2c::Error;
 }
 
-impl embedded_hal::i2c::I2c for I2CProxy<'_> {
+impl<I2C> embedded_hal::i2c::I2c for I2CProxy<'_, I2C>
+where
+    I2C: Instance,
+{
     fn transaction(
         &mut self,
         address: u8,
         operations: &mut [embedded_hal::i2c::Operation<'_>],
     ) -> Result<(), Self::Error> {
         interrupt::free(|cs| {
-            let bus = self.i2c.borrow(cs);
-            let mut bus_m = bus.borrow_mut();
-
-            let _ = bus_m.transaction_slice(address, operations);
-        });
-        Ok(())
+            let mut bus = self.i2c.borrow(cs).borrow_mut();
+            bus.transaction_slice(address, operations)
+        })
     }
 }
 
