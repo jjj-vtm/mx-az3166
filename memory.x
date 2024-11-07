@@ -1,9 +1,9 @@
 MEMORY
 {
-  /* Flash memory begins at 0x80000000 and has a size of 64kB*/
+  /* Flash memory begins at 0x80000000 and has a size of 1024kB*/
   /* We keep the last 4K for persistency */
   FLASH : ORIGIN = 0x08000000, LENGTH = 1024K
-  /* RAM begins at 0x20000000 and has a size of 20kB*/
+  /* RAM begins at 0x20000000 and has a size of 256kB*/
   RAM : ORIGIN = 0x20000000, LENGTH = 256K
 }
 
