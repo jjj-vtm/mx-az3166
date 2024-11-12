@@ -12,6 +12,8 @@ use embedded_hal::delay::DelayNs;
 use heapless::String;
 use panic_probe as _; // global logger
 
+use mxaz3166_board::*;
+
 use cortex_m_rt::entry;
 use embedded_graphics::{
     mono_font::{ascii::FONT_6X10, MonoTextStyleBuilder},
@@ -81,8 +83,8 @@ fn main() -> ! {
 
     let proxy2 = I2CProxy { i2c: &i2c_m };
 
-    let mut hts221 = hts221::Builder::new()
-        .with_data_rate(hts221::DataRate::Continuous1Hz)
+    let mut hts221 = mxaz3166_board::hts221::Builder::new()
+        .with_data_rate(mxaz3166_board::hts221::DataRate::Continuous1Hz)
         .build(&mut proxy1)
         .unwrap();
 

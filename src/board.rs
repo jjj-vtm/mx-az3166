@@ -53,3 +53,7 @@ where
         })
     }
 }
+
+struct Board {
+    
+}
