@@ -54,20 +54,26 @@ where
     }
 }
 
-type DisplayType<I2C> = Ssd1306<ssd1306::prelude::I2CInterface<I2C>, DisplaySize128x64, ssd1306::mode::BufferedGraphicsMode<DisplaySize128x64>>;
-type TempSensorType<I2C> =  hts221::HTS221<I2C, stm32f4xx_hal::i2c::Error>;
+type DisplayType<I2C> = Ssd1306<
+    ssd1306::prelude::I2CInterface<I2C>,
+    DisplaySize128x64,
+    ssd1306::mode::BufferedGraphicsMode<DisplaySize128x64>,
+>;
+type TempSensorType<I2C> = hts221::HTS221<I2C, stm32f4xx_hal::i2c::Error>;
 
-
-pub struct Board<I2C> where I2C: embedded_hal::i2c::I2c {
+pub struct Board<I2C>
+where
+    I2C: embedded_hal::i2c::I2c,
+{
     pub display: Option<DisplayType<I2C>>,
     pub temp_sensor: Option<TempSensorType<I2C>>,
 }
 
-pub type SharedBus = Mutex<RefCell<I2c<I2C1>>>;
-pub type SharedBusT<'a> = I2CProxy<'a, I2C1>;
+type SharedBus = Mutex<RefCell<I2c<I2C1>>>;
+type SharedBusT<'a> = I2CProxy<'a, I2C1>;
 
 impl<'bus> Board<SharedBusT<'bus>> {
-
+    /// Initializes the board peripahls and constructs the I2C bus
     pub fn construct_bus() -> SharedBus {
         let p = pac::Peripherals::take().unwrap();
 
@@ -83,23 +89,30 @@ impl<'bus> Board<SharedBusT<'bus>> {
         return Mutex::new(RefCell::new(i2c));
     }
 
+    /// Finishes the construction using the bus
+    /// /// # Examples
+    ///
+    /// ```
+    ///    let bus = mxaz3166_board::Board::construct_bus();
+    ///    let board = Board::initialize_periphals(&bus);
+    ///    let mut display = board.display.unwrap();
+    /// ```
     pub fn initialize_periphals(bus: &'bus SharedBus) -> Board<I2CProxy<'bus, I2C1>> {
-
         let mut proxy1 = I2CProxy { i2c: bus };
 
         let proxy2 = I2CProxy { i2c: bus };
-    
-        let hts221= hts221::Builder::new()
+
+        let hts221 = hts221::Builder::new()
             .with_data_rate(hts221::DataRate::Continuous1Hz)
             .build(&mut proxy1)
             .unwrap();
-        
+
         let interface = I2CDisplayInterface::new(proxy2);
-    
+
         let mut display = Ssd1306::new(interface, DisplaySize128x64, DisplayRotation::Rotate0)
             .into_buffered_graphics_mode();
         display.init().unwrap();
-        
+
         Self {
             display: Some(display),
             temp_sensor: Some(hts221),
