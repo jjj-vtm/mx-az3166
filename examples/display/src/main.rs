@@ -6,6 +6,7 @@ use core::{cell::RefCell, fmt::Write};
 
 use cortex_m::interrupt::{self, Mutex};
 use defmt::info;
+use mxaz3166_board::*;
 // pick a panicking behavior
 use defmt_rtt as _;
 use embedded_hal::delay::DelayNs;
@@ -63,37 +64,13 @@ where
 
 #[entry]
 fn main() -> ! {
-    let p = pac::Peripherals::take().unwrap();
+    let bus = mxaz3166_board::Board::construct_bus();
+    let board = Board::initialize_periphals(&bus);
+
+    let mut display = board.display.unwrap();
+    let hts221 = board.temp_sensor.unwrap();
     info!("Starting up");
 
-    let rcc = p.RCC.constrain();
-    let clocks = rcc.cfgr.freeze();
-
-    let mut delay = p.TIM5.delay_us(&clocks);
-
-    let gpiob = p.GPIOB.split();
-    // Configure I2C1
-    let scl = gpiob.pb8;
-    let sda = gpiob.pb9;
-
-    let i2c = I2c::new(p.I2C1, (scl, sda), Mode::standard(Hertz::kHz(400)), &clocks);
-    let i2c_m = Mutex::new(RefCell::new(i2c));
-
-    let mut proxy1 = I2CProxy { i2c: &i2c_m };
-
-    let proxy2 = I2CProxy { i2c: &i2c_m };
-
-    let mut hts221 = mxaz3166_board::hts221::Builder::new()
-        .with_data_rate(mxaz3166_board::hts221::DataRate::Continuous1Hz)
-        .build(&mut proxy1)
-        .unwrap();
-
-    let mut buffer: String<32> = String::new();
-
-    let interface = I2CDisplayInterface::new(proxy2);
-
-    let mut display = Ssd1306::new(interface, DisplaySize128x64, DisplayRotation::Rotate0)
-        .into_buffered_graphics_mode();
     display.init().unwrap();
 
     let text_style = MonoTextStyleBuilder::new()
@@ -101,20 +78,22 @@ fn main() -> ! {
         .text_color(BinaryColor::On)
         .build();
 
+    Text::with_baseline("Test", Point::zero(), text_style, Baseline::Top)
+        .draw(&mut display)
+        .unwrap();
+
+    display.flush().unwrap();
+
+
+    display.clear_buffer();
+
     loop {
-        let deg_c = hts221.temperature_x8(&mut proxy1).unwrap() as f32 / 8.0;
+        // let deg_c = hts221.temperature_x8(&mut proxy1).unwrap() as f32 / 8.0;
 
-        info!("Temp: {:?}", deg_c);
-        write!(buffer, "Temperatur: {:?}", deg_c).unwrap();
+        // info!("Temp: {:?}", deg_c);
+        //write!(buffer, "Temperatur: {:?}", deg_c).unwrap();
 
-        Text::with_baseline(buffer.as_str(), Point::zero(), text_style, Baseline::Top)
-            .draw(&mut display)
-            .unwrap();
-
-        display.flush().unwrap();
-
-        delay.delay_ms(1000);
-        buffer.clear();
-        display.clear_buffer();
+            // delay.delay_ms(1000);
+    // buffer.clear();
     }
 }
