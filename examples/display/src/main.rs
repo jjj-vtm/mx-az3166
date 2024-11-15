@@ -68,7 +68,7 @@ fn main() -> ! {
     let board = Board::initialize_periphals(&bus);
 
     let mut display = board.display.unwrap();
-    let hts221 = board.temp_sensor.unwrap();
+    let mut hts221 = board.temp_sensor.unwrap();
     info!("Starting up");
 
     display.init().unwrap();
@@ -82,9 +82,13 @@ fn main() -> ! {
         .draw(&mut display)
         .unwrap();
 
+    let mut bus_p = mxaz3166_board::I2CProxy {
+        i2c: &bus,
+    };
+
     display.flush().unwrap();
-
-
+    let deg_c = hts221.temperature_x8(&mut bus_p).unwrap() as f32 / 8.0;
+    info!("Temp: {:?}", deg_c);
     display.clear_buffer();
 
     loop {

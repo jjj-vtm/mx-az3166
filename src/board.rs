@@ -28,7 +28,7 @@ use stm32f4xx_hal::{
 };
 
 pub struct I2CProxy<'a, I2C: Instance> {
-    i2c: &'a Mutex<RefCell<I2c<I2C>>>,
+    pub i2c: &'a Mutex<RefCell<I2c<I2C>>>,
 }
 
 impl<I2C> embedded_hal::i2c::ErrorType for I2CProxy<'_, I2C>
