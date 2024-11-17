@@ -4,7 +4,10 @@
 
 use core::{cell::RefCell, fmt::Write};
 
-use cortex_m::interrupt::{self, Mutex};
+use cortex_m::{
+    delay,
+    interrupt::{self, Mutex},
+};
 use defmt::info;
 use mxaz3166_board::*;
 // pick a panicking behavior
@@ -22,54 +25,28 @@ use embedded_graphics::{
     prelude::*,
     text::{Baseline, Text},
 };
-use ssd1306::{
-    mode::DisplayConfig, prelude::DisplayRotation, size::DisplaySize128x64, I2CDisplayInterface,
-    Ssd1306,
-};
+use ssd1306::mode::DisplayConfig;
 use stm32f4xx_hal::{
-    gpio::GpioExt,
     i2c::{I2c, Instance, Mode},
     pac::{self},
-    rcc::RccExt,
-    time::Hertz,
     timer::TimerExt,
 };
 
-struct I2CProxy<'a, I2C: Instance> {
-    i2c: &'a Mutex<RefCell<I2c<I2C>>>,
-}
-
-impl<I2C> embedded_hal::i2c::ErrorType for I2CProxy<'_, I2C>
-where
-    I2C: Instance,
-{
-    type Error = stm32f4xx_hal::i2c::Error;
-}
-
-impl<I2C> embedded_hal::i2c::I2c for I2CProxy<'_, I2C>
-where
-    I2C: Instance,
-{
-    fn transaction(
-        &mut self,
-        address: u8,
-        operations: &mut [embedded_hal::i2c::Operation<'_>],
-    ) -> Result<(), Self::Error> {
-        interrupt::free(|cs| {
-            let mut bus = self.i2c.borrow(cs).borrow_mut();
-            bus.transaction_slice(address, operations)
-        })
-    }
-}
-
 #[entry]
 fn main() -> ! {
-    let bus = mxaz3166_board::Board::construct_bus();
-    let board = Board::initialize_periphals(&bus);
+    let mut board = mxaz3166_board::Board::construct_bus();
+    
+    let mut board = Board::initialize_periphals(&mut board);
+
+    let mut delay = board.TIM5.take().unwrap().delay_us(&board.clocks.unwrap());
 
     let mut display = board.display.unwrap();
-    let mut hts221 = board.temp_sensor.unwrap();
+    let mut hts221 = board.temp_sensor.0.unwrap();
+    let mut hts_bus = board.temp_sensor.1.unwrap();
+
     info!("Starting up");
+
+    let mut buffer: String<32> = String::new();
 
     display.init().unwrap();
 
@@ -82,22 +59,20 @@ fn main() -> ! {
         .draw(&mut display)
         .unwrap();
 
-    let mut bus_p = mxaz3166_board::I2CProxy {
-        i2c: &bus,
-    };
-
     display.flush().unwrap();
-    let deg_c = hts221.temperature_x8(&mut bus_p).unwrap() as f32 / 8.0;
-    info!("Temp: {:?}", deg_c);
-    display.clear_buffer();
 
     loop {
-        // let deg_c = hts221.temperature_x8(&mut proxy1).unwrap() as f32 / 8.0;
+        let deg_c = hts221.temperature_x8(&mut hts_bus).unwrap() as f32 / 8.0;
 
-        // info!("Temp: {:?}", deg_c);
-        //write!(buffer, "Temperatur: {:?}", deg_c).unwrap();
+        write!(buffer, "Temperatur: {:?}", deg_c).unwrap();
 
-            // delay.delay_ms(1000);
-    // buffer.clear();
+        Text::with_baseline(buffer.as_str(), Point::zero(), text_style, Baseline::Top)
+            .draw(&mut display)
+            .unwrap();
+        display.flush().unwrap();
+
+        delay.delay_ms(1000);
+        buffer.clear();
+        display.clear_buffer();
     }
 }

@@ -4,16 +4,9 @@ use cortex_m::interrupt::{self, Mutex};
 use defmt::info;
 // pick a panicking behavior
 use defmt_rtt as _;
-use embedded_hal::delay::DelayNs;
-use heapless::String;
+
 use panic_probe as _; // global logger
 
-use embedded_graphics::{
-    mono_font::{ascii::FONT_6X10, MonoTextStyleBuilder},
-    pixelcolor::BinaryColor,
-    prelude::*,
-    text::{Baseline, Text},
-};
 use ssd1306::{
     mode::DisplayConfig, prelude::DisplayRotation, size::DisplaySize128x64, I2CDisplayInterface,
     Ssd1306,
@@ -21,10 +14,9 @@ use ssd1306::{
 use stm32f4xx_hal::{
     gpio::GpioExt,
     i2c::{I2c, Instance, Mode},
-    pac::{self, I2C1},
-    rcc::RccExt,
+    pac::{self, I2C1, TIM5},
+    rcc::{Clocks, RccExt},
     time::Hertz,
-    timer::TimerExt,
 };
 
 pub struct I2CProxy<'a, I2C: Instance> {
@@ -66,15 +58,19 @@ where
     I2C: embedded_hal::i2c::I2c,
 {
     pub display: Option<DisplayType<I2C>>,
-    pub temp_sensor: Option<TempSensorType<I2C>>,
+    pub temp_sensor: (Option<TempSensorType<I2C>>, Option<I2C>),
+    pub shared_bus: Option<SharedBus>,
+    pub clocks: Option<Clocks>,
+    pub TIM5: Option<TIM5>,
 }
 
 type SharedBus = Mutex<RefCell<I2c<I2C1>>>;
 type SharedBusT<'a> = I2CProxy<'a, I2C1>;
 
 impl<'bus> Board<SharedBusT<'bus>> {
+
     /// Initializes the board peripahls and constructs the I2C bus
-    pub fn construct_bus() -> SharedBus {
+    pub fn construct_bus() -> Board<SharedBusT<'bus>> {
         let p = pac::Peripherals::take().unwrap();
 
         let rcc = p.RCC.constrain();
@@ -86,7 +82,13 @@ impl<'bus> Board<SharedBusT<'bus>> {
         let sda = gpiob.pb9;
 
         let i2c = I2c::new(p.I2C1, (scl, sda), Mode::standard(Hertz::kHz(400)), &clocks);
-        return Mutex::new(RefCell::new(i2c));
+        Board {
+            display: None,
+            temp_sensor: (None, None),
+            clocks: Some(clocks),
+            TIM5: Some(p.TIM5),
+            shared_bus:  Some(Mutex::new(RefCell::new(i2c))),
+        }
     }
 
     /// Finishes the construction using the bus
@@ -97,10 +99,10 @@ impl<'bus> Board<SharedBusT<'bus>> {
     ///    let board = Board::initialize_periphals(&bus);
     ///    let mut display = board.display.unwrap();
     /// ```
-    pub fn initialize_periphals(bus: &'bus SharedBus) -> Board<I2CProxy<'bus, I2C1>> {
-        let mut proxy1 = I2CProxy { i2c: bus };
+    pub fn initialize_periphals(&'bus mut self) -> Self {
+        let mut proxy1 = I2CProxy { i2c: self.shared_bus.as_ref().unwrap() };
 
-        let proxy2 = I2CProxy { i2c: bus };
+        let proxy2 = I2CProxy { i2c: self.shared_bus.as_ref().unwrap() };
 
         let hts221 = hts221::Builder::new()
             .with_data_rate(hts221::DataRate::Continuous1Hz)
@@ -113,9 +115,14 @@ impl<'bus> Board<SharedBusT<'bus>> {
             .into_buffered_graphics_mode();
         display.init().unwrap();
 
-        Self {
+        Board {
             display: Some(display),
-            temp_sensor: Some(hts221),
+            temp_sensor: (Some(hts221), Some(proxy1)),
+            shared_bus: None,
+            clocks: self.clocks.take(),
+            TIM5: self.TIM5.take(),
         }
+
+       
     }
 }
